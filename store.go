@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	_ "modernc.org/sqlite"
 )
@@ -16,9 +20,15 @@ import (
 const schema = `
 CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, doc TEXT NOT NULL, data TEXT NOT NULL, updated INTEGER NOT NULL DEFAULT (unixepoch()));
 CREATE INDEX IF NOT EXISTS notes_doc ON notes(doc);
-CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, created INTEGER NOT NULL DEFAULT (unixepoch()));`
+CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, created INTEGER NOT NULL DEFAULT (unixepoch()));
+CREATE TABLE IF NOT EXISTS docs (hash TEXT PRIMARY KEY, name TEXT NOT NULL, pages INTEGER NOT NULL DEFAULT 0, opened INTEGER NOT NULL DEFAULT (unixepoch()));`
 
-type store struct{ db *sql.DB }
+// docsDir holds a copy of every opened PDF as <sha256>.pdf, so recent papers reopen in one click.
+// ponytail: copies are never pruned; add cleanup for docs not opened in N days if disk use matters.
+type store struct {
+	db      *sql.DB
+	docsDir string
+}
 
 func defaultDBPath() string {
 	dir, err := os.UserConfigDir()
@@ -39,7 +49,98 @@ func openStore(path string) (*store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, err
 	}
-	return &store{db}, nil
+	dir := filepath.Join(filepath.Dir(path), "docs")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	return &store{db, dir}, nil
+}
+
+var docHash = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// docPath returns where a document's copy lives; ok is false for anything that isn't a sha256 hex
+// (which also rules out path traversal).
+func (s *store) docPath(hash string) (string, bool) {
+	if !docHash.MatchString(hash) {
+		return "", false
+	}
+	return filepath.Join(s.docsDir, hash+".pdf"), true
+}
+
+var errBadDoc = errors.New("not a PDF matching its hash")
+
+// saveDoc stores body as the copy of hash, rejecting anything that isn't a PDF with that sha256.
+func (s *store) saveDoc(hash string, body io.Reader) error {
+	path, ok := s.docPath(hash)
+	if !ok {
+		return errBadDoc
+	}
+	tmp, err := os.CreateTemp(s.docsDir, "upload-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	h := sha256.New()
+	var head bytes.Buffer
+	if _, err := io.Copy(io.MultiWriter(tmp, h, &limitedWriter{&head, 5}), body); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if hex.EncodeToString(h.Sum(nil)) != hash || head.String() != "%PDF-" {
+		return errBadDoc
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
+// limitedWriter keeps only the first n bytes (used to sniff the PDF header).
+type limitedWriter struct {
+	b *bytes.Buffer
+	n int
+}
+
+func (w *limitedWriter) Write(p []byte) (int, error) {
+	if left := w.n - w.b.Len(); left > 0 {
+		w.b.Write(p[:min(left, len(p))])
+	}
+	return len(p), nil
+}
+
+func (s *store) touchDoc(hash, name string, pages int) error {
+	_, err := s.db.Exec(`INSERT INTO docs(hash, name, pages) VALUES(?, ?, ?)
+		ON CONFLICT(hash) DO UPDATE SET name = excluded.name, pages = excluded.pages, opened = unixepoch()`, hash, name, pages)
+	return err
+}
+
+type recentDoc struct {
+	Hash   string `json:"hash"`
+	Name   string `json:"name"`
+	Pages  int    `json:"pages"`
+	Opened int64  `json:"opened"`
+}
+
+// recentDocs lists the most recently opened documents whose copy still exists.
+func (s *store) recentDocs(n int) ([]recentDoc, error) {
+	rows, err := s.db.Query(`SELECT hash, name, pages, opened FROM docs ORDER BY opened DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []recentDoc{}
+	for rows.Next() && len(out) < n {
+		var d recentDoc
+		if err := rows.Scan(&d.Hash, &d.Name, &d.Pages, &d.Opened); err != nil {
+			return nil, err
+		}
+		if p, ok := s.docPath(d.Hash); ok {
+			if _, err := os.Stat(p); err == nil {
+				out = append(out, d)
+			}
+		}
+	}
+	return out, rows.Err()
 }
 
 func (s *store) notes(doc string) ([]json.RawMessage, error) {

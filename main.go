@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -115,6 +116,50 @@ func main() {
 		w.Header().Set("X-Doc-Name", filepath.Base(pdfPath))
 		w.Header().Set("Content-Type", "application/pdf")
 		http.ServeFile(w, r, pdfPath)
+	})
+
+	// Copies of opened PDFs, for the "recent" list on the intro page.
+	http.HandleFunc("GET /api/recent", func(w http.ResponseWriter, r *http.Request) {
+		docs, err := db.recentDocs(3)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		json.NewEncoder(w).Encode(docs)
+	})
+
+	http.HandleFunc("GET /api/docs/{hash}", func(w http.ResponseWriter, r *http.Request) { // GET also answers HEAD
+		path, ok := db.docPath(r.PathValue("hash"))
+		if _, err := os.Stat(path); !ok || err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/pdf")
+		http.ServeFile(w, r, path)
+	})
+
+	// PUT with the PDF as body stores a copy (the client skips the body if HEAD says we have it);
+	// either way the doc is marked as just opened.
+	http.HandleFunc("PUT /api/docs/{hash}", func(w http.ResponseWriter, r *http.Request) {
+		hash := r.PathValue("hash")
+		path, ok := db.docPath(hash)
+		if !ok {
+			http.Error(w, "bad hash", 400)
+			return
+		}
+		if r.ContentLength != 0 {
+			if err := db.saveDoc(hash, http.MaxBytesReader(w, r.Body, 1<<30)); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+		} else if _, err := os.Stat(path); err != nil {
+			http.Error(w, "no stored copy; send the PDF", 409)
+			return
+		}
+		pages, _ := strconv.Atoi(r.URL.Query().Get("pages"))
+		if err := db.touchDoc(hash, r.URL.Query().Get("name"), pages); err != nil {
+			http.Error(w, err.Error(), 500)
+		}
 	})
 
 	http.HandleFunc("GET /api/models", func(w http.ResponseWriter, r *http.Request) {

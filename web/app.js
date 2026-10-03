@@ -34,12 +34,15 @@ if (!location.search.includes("home")) fetch("/api/doc", { cache: "no-store" }).
 $("history").onclick = () => { showAll = !showAll; if (showAll) sidebarOpen = true; renderCards(); };
 $("sideBtn").onclick = () => toggleSidebar();
 $("snipBtn").onclick = () => setSnip(!snipping);
-$("focusBtn").onclick = () => setFocus(!$("reader").classList.contains("focus"));
-$("suggest").checked = store.get("margin:suggest", true);
-$("suggest").onchange = (e) => {
-  store.set("margin:suggest", e.target.checked);
+let suggestOn = store.get("margin:suggest", false);
+$("suggest").setAttribute("aria-checked", suggestOn);
+$("suggestLbl").onclick = () => $("suggest").click();
+$("suggest").onclick = () => {
+  suggestOn = !suggestOn;
+  $("suggest").setAttribute("aria-checked", suggestOn);
+  store.set("margin:suggest", suggestOn);
   if (!active || active.question) return;
-  if (e.target.checked && !active.sugs) return loadSuggestions(active);
+  if (suggestOn && !active.sugs) return loadSuggestions(active);
   const el = $("cards").querySelector(`[data-id="${active.id}"] .sugs`);
   if (el) fillSuggestions(el, active);
 };
@@ -51,23 +54,16 @@ function setSnip(on) {
   $("snipBtn").classList.toggle("on", on);
   if (on) flash("Drag over a figure, table or equation");
 }
-function setFocus(on) {
-  $("reader").classList.toggle("focus", on);
-  $("focusBtn").classList.toggle("on", on);
-  if (on) { sidebarOpen = false; renderCards(); flash("Focus mode · F to exit"); }
-}
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if (snipping) return setSnip(false);
     if (active) { active = null; return renderCards(); }
-    if ($("reader").classList.contains("focus")) return setFocus(false);
     return;
   }
   if ($("reader").hidden || e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, textarea, [role=listbox]")) return;
   const k = e.key.toLowerCase();
-  if (k === "f") setFocus(!$("reader").classList.contains("focus"));
-  else if (k === "r") setSnip(!snipping);
+  if (k === "r") setSnip(!snipping);
   else if (k === "m") toggleSidebar();
 });
 
@@ -138,6 +134,38 @@ async function refreshUsage() {
 }
 refreshUsage();
 
+// ---------- recent papers (intro) ----------
+const ago = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+function since(sec) {
+  const d = sec - Date.now() / 1000;
+  for (const [unit, n] of [["day", 86400], ["hour", 3600], ["minute", 60]]) if (Math.abs(d) >= n) return ago.format(Math.round(d / n), unit);
+  return "just now";
+}
+fetch("/api/recent").then((r) => r.json()).then((docs) => {
+  if (!docs.length) return;
+  $("recent").hidden = false;
+  $("recentList").replaceChildren(...docs.map((d) => {
+    const b = document.createElement("button");
+    b.innerHTML = `<span class="rname"></span><span class="rmeta"></span>`;
+    b.querySelector(".rname").textContent = d.name;
+    b.querySelector(".rmeta").textContent = `${d.pages ? d.pages + " pages · " : ""}${since(d.opened)}`;
+    b.onclick = async () => {
+      const r = await fetch(`/api/docs/${d.hash}`);
+      if (r.ok) open(new File([await r.blob()], d.name, { type: "application/pdf" }));
+    };
+    const li = document.createElement("li");
+    li.append(b);
+    return li;
+  }));
+}).catch(() => {});
+
+// Keep a copy server-side (once per unique PDF) so it can be reopened from "recent".
+async function remember(file, pages) {
+  const url = `/api/docs/${docHash}?` + new URLSearchParams({ name: file.name, pages });
+  const have = await fetch(url, { method: "HEAD" }).then((r) => r.ok).catch(() => false);
+  fetch(url, { method: "PUT", body: have ? "" : file }).catch(() => {});
+}
+
 // ---------- open + render ----------
 async function open(file) {
   if (!file || file.type !== "application/pdf") return;
@@ -153,6 +181,7 @@ async function open(file) {
     return;
   }
   docName = file.name;
+  remember(file, pdf.numPages);
   notes = await fetch(`/api/notes?doc=${docHash}`).then((r) => r.json()).catch(() => []);
   sidebarOpen = notes.some((n) => n.pinned);
   $("docName").textContent = file.name;
@@ -296,7 +325,7 @@ function startNote(el, rects, quote, image) {
   sidebarOpen = true;
   renderCards();
   $("cards").querySelector("textarea")?.focus();
-  if ($("suggest").checked) loadSuggestions(active);
+  if (suggestOn) loadSuggestions(active);
 }
 
 pages.addEventListener("mousedown", (e) => {
@@ -364,24 +393,46 @@ pages.addEventListener("mouseup", (e) => {
   });
 });
 
-// hover: answers not in the margin show as a popover; ones in the margin light up their card
-pages.addEventListener("mousemove", (e) => {
-  const hit = snipping ? null : noteAt(e), pop = $("pop");
-  document.querySelectorAll(".hl i.on, .card.on").forEach((x) => x.classList.remove("on"));
-  if (!hit) return (pop.hidden = true);
-  document.querySelectorAll(`[data-id="${hit.id}"]`).forEach((x) => x.classList.add("on"));
-  if (sidebarOpen && inMargin(hit)) return (pop.hidden = true);
+// hover: answers not in the margin show as a popover; ones in the margin light up their card.
+// The popover is anchored under the highlight (not the cursor) and lingers briefly, so the
+// pointer can move into it and scroll a long answer.
+const pop = $("pop");
+let popNote = null, popHideT;
+function hidePop() { clearTimeout(popHideT); pop.hidden = true; popNote = null; }
+function hidePopSoon() { clearTimeout(popHideT); popHideT = setTimeout(hidePop, 300); }
+function showPop(note) {
+  clearTimeout(popHideT);
+  if (popNote === note) return;
+  popNote = note;
   pop.innerHTML = `<div class="q"></div><div class="a"></div>`;
-  pop.querySelector(".q").textContent = "Q · " + hit.question;
-  pop.querySelector(".a").innerHTML = md(hit.answer);
+  pop.querySelector(".q").textContent = "Q · " + note.question;
+  pop.querySelector(".a").innerHTML = md(note.answer);
+  pop.scrollTop = 0;
   pop.hidden = false;
-  pop.style.left = Math.min(e.clientX + 14, innerWidth - 340) + "px";
-  pop.style.top = Math.min(e.clientY + 14, innerHeight - pop.offsetHeight - 10) + "px";
+  const rs = [...pages.querySelectorAll(`.hl i[data-id="${note.id}"]`)].map((i) => i.getBoundingClientRect());
+  const top = Math.min(...rs.map((r) => r.top)), bottom = Math.max(...rs.map((r) => r.bottom)), left = Math.min(...rs.map((r) => r.left));
+  const h = pop.offsetHeight, w = pop.offsetWidth;
+  pop.style.left = Math.max(8, Math.min(left, innerWidth - w - 8)) + "px";
+  pop.style.top = (bottom + 6 + h < innerHeight ? bottom + 6 : Math.max(8, top - 6 - h)) + "px";
+}
+pop.addEventListener("mouseenter", () => clearTimeout(popHideT));
+pop.addEventListener("mouseleave", hidePopSoon);
+pages.addEventListener("scroll", hidePop);
+
+pages.addEventListener("mousemove", (e) => {
+  const hit = snipping ? null : noteAt(e);
+  document.querySelectorAll(".hl i.on, .card.on").forEach((x) => x.classList.remove("on"));
+  if (!hit) return popNote && hidePopSoon();
+  document.querySelectorAll(`[data-id="${hit.id}"]`).forEach((x) => x.classList.add("on"));
+  if (sidebarOpen && inMargin(hit)) return hidePop();
+  showPop(hit);
 });
-pages.addEventListener("mouseleave", () => ($("pop").hidden = true));
+pages.addEventListener("mouseleave", hidePopSoon);
 
 // ---------- margin cards ----------
 const inMargin = (n) => showAll || n.pinned || n === active;
+const LONG = 360;           // answers longer than this start collapsed
+const expanded = new Set(); // note ids the reader has expanded this session
 
 function renderCards() {
   const shown = notes.filter(inMargin);
@@ -425,6 +476,16 @@ function card(note) {
   c.querySelector(".meta").textContent = metaText(note);
   c.querySelector(".q").textContent = "Q · " + note.question;
   c.querySelector(".a").innerHTML = md(note.answer);
+  // ponytail: "long" is a character count, not a measured height; cheap and stable while the margin animates
+  if (note !== active && note.answer.length > LONG && !expanded.has(note.id)) {
+    const a = c.querySelector(".a");
+    a.classList.add("clamp");
+    const more = document.createElement("button");
+    more.className = "more";
+    more.textContent = "more";
+    more.onclick = () => { expanded.add(note.id); a.classList.remove("clamp"); more.remove(); };
+    a.after(more);
+  }
   const pin = c.querySelector(".pin");
   pin.textContent = note.pinned ? "◆ pinned" : "◇ pin";
   pin.classList.toggle("pinned", note.pinned);
@@ -469,7 +530,7 @@ async function loadSuggestions(note) {
 
 function fillSuggestions(el, note) {
   el.replaceChildren();
-  if (!$("suggest").checked || !note.sugs) return;
+  if (!suggestOn || !note.sugs) return;
   if (note.sugs === "loading") return (el.innerHTML = `<span class="loading">suggesting questions…</span>`);
   for (const q of note.sugs) {
     const b = document.createElement("button");

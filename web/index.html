@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Margin</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="vendor/katex/katex.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -23,9 +23,11 @@
         <span class="ic"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 6.6C10.2 5 7.5 4.5 3.5 4.8v13.6c4-.3 6.7.2 8.5 1.8 1.8-1.6 4.5-2.1 8.5-1.8V4.8c-4-.3-6.7.2-8.5 1.8z"/><path d="M12 6.6v13.6M6 8.6c1.6-.1 2.9.1 4 .6M6 11.8c1.6-.1 2.9.1 4 .6M14 9.2c1.1-.5 2.4-.7 4-.6"/></svg></span>
         <span><b id="dropName">Open a paper</b><small id="dropMeta">Drag a PDF here, or click to browse</small></span>
       </label>
-      <div class="feats"><span>Ask about figures &amp; tables</span><span>Pinned notes</span><span>Page-aware context</span><span>Model choice</span></div>
+      <div class="recent" id="recent" hidden>
+        <div class="recent-h">Recently opened</div>
+        <ul id="recentList"></ul>
+      </div>
     </div>
-    <div class="note">runs locally · your files never leave this machine except highlighted context sent to the model</div>
   </section>
   <section class="right" aria-hidden="true">
     <div class="page-demo">
@@ -48,12 +50,8 @@
     <button class="tool" id="snipBtn" title="Ask about a region: figure, table, equation (R)" aria-label="Select region">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></svg>
     </button>
-    <button class="tool" id="focusBtn" title="Focus mode (F)" aria-label="Focus mode">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/></svg>
-    </button>
     <span class="sep"></span>
     <button class="toggle" id="history" title="Show every question asked on this document">history (0)</button>
-    <label class="toggle" title="Suggest questions for highlighted text"><input type="checkbox" id="suggest"> suggestions</label>
     <div class="dd" id="modelDD">
       <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" title="Model">
         <span>model</span><svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
@@ -67,7 +65,13 @@
   <div class="progress"><i id="prog"></i></div>
   <div class="split" id="split">
     <main id="pages"></main>
-    <aside id="margin"><div id="cards"></div></aside>
+    <aside id="margin">
+      <div id="cards"></div>
+      <div class="mfoot">
+        <button type="button" class="switch" id="suggest" role="switch" aria-checked="false" aria-labelledby="suggestLbl"><span class="knob"></span></button>
+        <span id="suggestLbl">Suggested questions</span>
+      </div>
+    </aside>
   </div>
   <div class="pageind" id="pageind" aria-live="polite"></div>
   <div class="pop" id="pop" hidden></div>

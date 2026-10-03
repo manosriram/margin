@@ -1,0 +1,9 @@
+- Remove focus mode
+- Instead of checkbox, make suggestions as toggle button wrt our design. Also move it inside the sidebar, to the bottom
+- Add github workflow for release wrt tag vx.y; add support for arm and x86 (linux)
+- Add recently opened papers in the intro page; remove "->" points. Put this instead. Show last 3 recently opened
+- Open a paper, Highlight a passage para: font - make it IBM plex, it its already that, make it bit thinner maybe
+- Remove runs locally
+- When i hover over already queried text, i see the answered box popping up. Make it scrollable and once hovered, allow mouse to enter that box to scroll.
+	Make its width more and height less
+- In history, if the answer is too long; add more button instead of showing everything

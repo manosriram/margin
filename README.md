@@ -21,6 +21,12 @@ One binary; the web UI and pdf.js are embedded. If the port is taken (another ma
 
 Notes and a cache of answers/suggestions live in SQLite at `-db` (default: `~/Library/Application Support/margin/margin.db` on macOS, `~/.config/margin/margin.db` on Linux). Notes are keyed by the PDF's content hash, so renaming or moving the file keeps its history. Asking the same question about the same passage with the same model is answered from the cache.
 
+A copy of each opened PDF is kept in `docs/` next to the database, so the intro page can reopen your last three papers in one click.
+
 ## Adding a provider
 
 Add an entry to `providers` in `providers.go` (name, models, fast model, `ask` func that streams text).
+
+## Releases
+
+Push a tag like `v1.2` (or `v1.2.3`); the `release` workflow tests, builds Linux `amd64` and `arm64` binaries and publishes them with checksums on the GitHub release.
