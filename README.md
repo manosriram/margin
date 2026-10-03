@@ -10,7 +10,7 @@ Read a PDF, highlight a passage, ask about it. Answers live in the margin — pi
 
 ```sh
 go build -o margin .
-./margin                 # opens http://127.0.0.1:7777
+./margin                 # opens http://127.0.0.1:7889
 ./margin paper.pdf       # opens straight into the PDF
 ./margin -addr 127.0.0.1:8080 -no-open -db ./margin.db
 ```

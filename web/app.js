@@ -515,8 +515,22 @@ async function ask(note, question) {
 
 const save = (note) => fetch(`/api/notes/${note.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(note) });
 
-// tiny markdown: escape, then **bold** and `code`
+// Math: $$…$$ and \[…\] (display), $…$ and \(…\) (inline). Inline $ follows pandoc's rule
+// (no space inside the delimiters, no digit right after) so "$5 and $10" stays plain text.
+const MATH = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(?=\S)([^$\n]+?)(?<=\S)\$(?!\d)/g;
+const escHTML = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+// tiny markdown: math → KaTeX, escape, then **bold** and `code`. Math is pulled out first so
+// escaping/markdown never touch the TeX; an unclosed $ while streaming just shows as text until it closes.
 function md(s) {
-  const esc = s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-  return esc.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  const math = [];
+  s = s.replace(MATH, (src, d1, d2, i1, i2) => {
+    const tex = d1 ?? d2 ?? i1 ?? i2;
+    math.push(window.katex ? katex.renderToString(tex, { displayMode: d1 != null || d2 != null, throwOnError: false }) : escHTML(src));
+    return `\u0000${math.length - 1}\u0000`;
+  });
+  return escHTML(s)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\u0000(\d+)\u0000/g, (_, i) => math[i]);
 }

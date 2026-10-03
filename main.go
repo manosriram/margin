@@ -22,7 +22,8 @@ import (
 var webFS embed.FS
 
 const systemPrompt = `You are a reading companion inside a PDF reader. The user highlighted a passage, or selected a region of the page (attached as an image), and asked a question about it.
-Answer directly and concisely (usually 2-6 sentences). Use the surrounding page text for context. Plain prose; light markdown only if it truly helps.`
+Answer directly and concisely (usually 2-6 sentences). Use the surrounding page text for context. Plain prose; light markdown only if it truly helps.
+Write math as LaTeX: $...$ inline, $$...$$ for display. Never use $ for currency; write "USD 5" instead.`
 
 type askReq struct {
 	Provider  string `json:"provider"`
@@ -80,7 +81,7 @@ func addUsage(u usage) {
 }
 
 func main() {
-	addr := flag.String("addr", "127.0.0.1:7777", "listen address")
+	addr := flag.String("addr", "127.0.0.1:7889", "listen address")
 	noOpen := flag.Bool("no-open", false, "don't open the browser")
 	dbPath := flag.String("db", defaultDBPath(), "SQLite database for notes and cache")
 	flag.Usage = func() {
