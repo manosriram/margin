@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Margin</title>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="intro">
+  <section class="left">
+    <div class="brand">Margin</div>
+    <div>
+      <div class="kicker">// FOR PAPERS, REPORTS &amp; DEEP READING</div>
+      <h1>Interrogate<br>every claim.</h1>
+      <p class="sub">Highlight a passage to question its method, unpack notation or trace an argument. Pin answers as margin notes and build understanding across the whole document.</p>
+      <label class="drop" id="drop">
+        <input type="file" accept="application/pdf" id="file">
+        <span class="ic"><svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6m-3-3h6"/></svg></span>
+        <span><b id="dropName">Open a paper</b><small id="dropMeta">Drag a PDF here, or click to browse</small></span>
+      </label>
+      <div class="feats"><span>Pinned notes</span><span>Page-aware context</span><span>Model choice</span></div>
+    </div>
+    <div class="note">runs locally · your files never leave this machine except highlighted context sent to the model</div>
+  </section>
+  <section class="right" aria-hidden="true">
+    <div class="page-demo">
+      <div class="meta">p. 6 · §3.2 Method</div>
+      <h4>Scaled Dot-Product Attention</h4>
+      We compute attention as softmax(QK<sup>T</sup>/√d<sub>k</sub>)V. <mark>For large values of d<sub>k</sub>, the dot products grow large in magnitude</mark>, pushing the softmax into regions with extremely small gradients<sup>[4]</sup>. To counteract this, we scale by 1/√d<sub>k</sub>.
+    </div>
+    <div class="notes-demo">
+      <div class="n"><div class="q">Q · why do they grow?</div>If q and k have unit-variance entries, q·k has variance d<sub>k</sub>, so magnitude scales with √d<sub>k</sub>.</div>
+      <div class="n faded"><div class="q">Q · what is [4]?</div>Hochreiter et al. on vanishing gradients.</div>
+    </div>
+  </section>
+</div>
+
+<div id="reader" hidden>
+  <header class="bar">
+    <button class="brand link" id="home" title="Open another PDF">Margin</button>
+    <span class="doc" id="docName"></span>
+    <label class="toggle" title="Suggest questions for highlighted text"><input type="checkbox" id="suggest"> suggestions</label>
+    <select id="model" title="Model"></select>
+  </header>
+  <div class="split" id="split">
+    <main id="pages"></main>
+    <aside id="margin"><div id="cards"></div></aside>
+  </div>
+  <div class="pop" id="pop" hidden></div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+:root { --bg:#f2efe8; --ink:#1f2430; --muted:#7d7a72; --line:#d9d4c8; --acc:#2f4a6d; --hl:rgba(47,74,109,.16); --hl-strong:rgba(47,74,109,.3); --sheet:#fbfaf6; --panel:#e6e2d8;
+  --serif:Newsreader,Georgia,serif; --sans:Inter,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace; }
+* { box-sizing:border-box; margin:0; }
+[hidden] { display:none !important; }
+body { background:var(--bg); color:var(--ink); font-family:var(--sans); min-height:100vh; }
+input[type=file] { display:none; }
+button { font:inherit; color:inherit; background:none; border:0; cursor:pointer; }
+
+/* ---------- intro ---------- */
+#intro { min-height:100vh; display:grid; grid-template-columns:1fr 1.1fr; }
+@media (max-width:880px) { #intro { grid-template-columns:1fr; } #intro .right { display:none; } }
+.left { padding:clamp(24px,6vw,72px); display:flex; flex-direction:column; justify-content:space-between; gap:40px; }
+.brand { font-family:var(--serif); font-size:22px; font-style:italic; }
+.kicker { font-family:var(--mono); font-size:12px; color:var(--acc); letter-spacing:.06em; margin-bottom:14px; }
+h1 { font-family:var(--serif); font-weight:400; font-size:clamp(36px,4.6vw,56px); line-height:1.06; letter-spacing:-.015em; }
+p.sub { color:var(--muted); margin:18px 0 28px; max-width:440px; line-height:1.6; }
+.drop { display:flex; align-items:center; gap:16px; max-width:470px; padding:18px 20px; border:1px solid var(--line); border-radius:10px; background:var(--sheet); cursor:pointer; transition:border-color .2s; }
+.drop.over, .drop:hover { border-color:var(--acc); }
+.drop .ic { width:44px; height:44px; flex:none; border-radius:8px; background:var(--acc); color:#fff; display:grid; place-items:center; }
+.drop b { font-weight:500; display:block; }
+.drop small { color:var(--muted); }
+.feats { display:flex; flex-wrap:wrap; gap:4px 24px; margin-top:20px; max-width:470px; font-size:13px; color:var(--muted); }
+.feats span::before { content:"→ "; color:var(--acc); }
+.note { font-family:var(--mono); font-size:12px; color:var(--muted); }
+.right { background:var(--panel); display:flex; align-items:center; justify-content:center; gap:16px; padding:48px 32px; }
+.page-demo { width:min(340px,60%); background:var(--sheet); border-radius:4px; padding:30px 28px; box-shadow:0 20px 50px rgba(30,35,50,.1); font-family:var(--serif); font-size:14px; line-height:1.65; color:#4f4d47; }
+.page-demo .meta { font-family:var(--mono); font-size:10.5px; color:var(--muted); margin-bottom:12px; }
+.page-demo h4 { font-size:17px; font-weight:400; color:var(--ink); margin-bottom:10px; }
+.page-demo mark { background:var(--hl); color:var(--ink); padding:0 2px; border-bottom:1.5px solid var(--acc); }
+.page-demo sup { font-family:var(--mono); font-size:9px; color:var(--acc); }
+.notes-demo { display:flex; flex-direction:column; gap:10px; width:220px; }
+.n { background:#fff; border-radius:8px; padding:12px 14px; font-size:12px; line-height:1.5; box-shadow:0 6px 18px rgba(30,35,50,.08); border-left:2px solid var(--acc); }
+.n .q { font-family:var(--mono); font-size:10.5px; color:var(--acc); margin-bottom:4px; }
+.n.faded { opacity:.55; }
+
+/* ---------- reader ---------- */
+#reader { height:100vh; display:flex; flex-direction:column; }
+.bar { display:flex; align-items:center; gap:16px; padding:10px 20px; border-bottom:1px solid var(--line); background:var(--bg); }
+.bar .doc { flex:1; min-width:0; font-family:var(--mono); font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar select { font:12px var(--mono); color:var(--ink); background:var(--sheet); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+.bar .toggle { display:flex; align-items:center; gap:6px; font:12px var(--mono); color:var(--muted); cursor:pointer; user-select:none; }
+.bar .toggle input { accent-color:var(--acc); margin:0; }
+.split { flex:1; min-height:0; display:grid; grid-template-columns:1fr 0; transition:grid-template-columns .25s ease; }
+.split.open { grid-template-columns:7fr 3fr; }
+@media (max-width:760px) { .split.open { grid-template-columns:1fr; grid-template-rows:1fr 45%; } }
+#pages { overflow:auto; background:var(--panel); padding:28px 24px 80px; }
+#margin { overflow:auto; background:var(--bg); border-left:1px solid var(--line); }
+#cards { display:flex; flex-direction:column; gap:12px; padding:16px; }
+
+.page { position:relative; margin:0 auto 20px; background:#fff; box-shadow:0 10px 30px rgba(30,35,50,.08); --scale-round-x:1px; --scale-round-y:1px; }
+.page canvas { position:absolute; inset:0; width:100%; height:100%; }
+.page .hl { position:absolute; inset:0; pointer-events:none; }
+.page .hl i { position:absolute; background:var(--hl); border-bottom:1.5px solid var(--acc); mix-blend-mode:multiply; }
+.page .hl i.on { background:var(--hl-strong); }
+.page .num { position:absolute; bottom:-18px; right:0; font:10.5px var(--mono); color:var(--muted); }
+
+.card { background:#fff; border-radius:8px; padding:12px 14px; font-size:13px; line-height:1.55; box-shadow:0 6px 18px rgba(30,35,50,.08); border-left:2px solid var(--acc); transition:box-shadow .2s; }
+.card.on { box-shadow:0 0 0 2px var(--hl-strong), 0 6px 18px rgba(30,35,50,.08); }
+.card .quote { font-family:var(--serif); font-style:italic; color:var(--muted); margin-bottom:8px; cursor:pointer; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.card .quote small { font:10.5px var(--mono); font-style:normal; color:var(--acc); margin-right:6px; }
+.card textarea { width:100%; resize:none; border:1px solid var(--line); border-radius:6px; padding:8px 10px; font:inherit; background:var(--sheet); outline:none; }
+.card textarea:focus { border-color:var(--acc); }
+.card .hint { font:10.5px var(--mono); color:var(--muted); margin-top:6px; }
+.card .sugs { display:flex; flex-direction:column; align-items:flex-start; gap:6px; margin-top:10px; }
+.card .sugs:empty { display:none; }
+.card .sugs button { text-align:left; font-size:12.5px; line-height:1.4; padding:5px 10px; border:1px solid var(--line); border-radius:12px; background:var(--sheet); }
+.card .sugs button:hover { border-color:var(--acc); color:var(--acc); }
+.card .sugs .loading { font:11px var(--mono); color:var(--muted); font-style:italic; }
+.card .q { font-family:var(--mono); font-size:11px; color:var(--acc); margin-bottom:4px; }
+.card .a { white-space:pre-wrap; }
+.card .a code { font:12px var(--mono); background:var(--bg); padding:0 3px; border-radius:3px; }
+.card .a:empty::after { content:"thinking…"; color:var(--muted); font-style:italic; }
+.card .actions { display:flex; gap:12px; justify-content:flex-end; margin-top:8px; font:11px var(--mono); color:var(--muted); }
+.card .actions button:hover { color:var(--acc); }
+.card .actions .pinned { color:var(--acc); }
+.empty { font:12px var(--mono); color:var(--muted); padding:8px 2px; }
+
+.pop { position:fixed; z-index:10; max-width:320px; background:#fff; border-radius:8px; padding:12px 14px; font-size:13px; line-height:1.55; box-shadow:0 12px 32px rgba(30,35,50,.16); border-left:2px solid var(--acc); pointer-events:none; white-space:pre-wrap; }
+.pop .q { font-family:var(--mono); font-size:11px; color:var(--acc); margin-bottom:4px; white-space:normal; }
+
+/* pdf.js text layer (subset of pdfjs-dist/web/pdf_viewer.css) */
+.textLayer { position:absolute; text-align:initial; inset:0; overflow:clip; opacity:1; line-height:1; transform-origin:0 0; z-index:2; forced-color-adjust:none;
+  --min-font-size:1; --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv:calc(1 / var(--min-font-size)); }
+.textLayer :is(span, br) { color:transparent; position:absolute; white-space:pre; cursor:text; transform-origin:0% 0%; }
+.textLayer > :not(.markedContent), .textLayer .markedContent span:not(.markedContent) { z-index:1; --font-height:0; font-size:calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x:1; --rotate:0deg; transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+.textLayer .markedContent { display:contents; }
+.textLayer ::selection { background:rgba(47,74,109,.28); color:transparent; }
+.textLayer br::selection { background:transparent; }
+.textLayer .endOfContent { display:block; position:absolute; inset:100% 0 0; z-index:0; cursor:default; user-select:none; }
+.textLayer.selecting .endOfContent { top:0; }

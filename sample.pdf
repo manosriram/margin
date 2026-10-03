@@ -1,0 +1,43 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 510 >>
+stream
+BT /F1 12 Tf 72 720 Td 16 TL (Scaled Dot-Product Attention) ' () ' (We compute attention as softmax\(QK^T / sqrt\(d_k\)\) V. For large values of d_k,) ' (the dot products grow large in magnitude, pushing the softmax function into) ' (regions where it has extremely small gradients. To counteract this effect,) ' (we scale the dot products by 1/sqrt\(d_k\).) ' () ' (Multi-head attention allows the model to jointly attend to information from) ' (different representation subspaces at different positions.) ' ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 119 >>
+stream
+BT /F1 12 Tf 72 720 Td 16 TL (Page two.) ' () ' (Positional encodings inject order information into the sequence.) ' ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000193 00000 n 
+0000000319 00000 n 
+0000000880 00000 n 
+0000001006 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1176
+%%EOF
