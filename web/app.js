@@ -329,7 +329,7 @@ function startNote(el, rects, quote, image) {
 }
 
 pages.addEventListener("mousedown", (e) => {
-  if (!snipping) return e.target.closest(".textLayer")?.classList.add("selecting");
+  if (!snipping) return;
   const el = e.target.closest(".page");
   if (!el || e.button !== 0) return;
   e.preventDefault();
@@ -356,7 +356,48 @@ pages.addEventListener("mousedown", (e) => {
   addEventListener("mousemove", move);
   addEventListener("mouseup", up);
 });
-document.addEventListener("mouseup", () => document.querySelectorAll(".textLayer.selecting").forEach((t) => t.classList.remove("selecting")));
+
+// Accurate text selection (ported from pdf.js's TextLayerBuilder). While selecting, .endOfContent
+// covers the whole page so the gaps between lines don't select nothing. But Chrome/Safari extend
+// the selection to wherever that element sits in the DOM, which is the end of the page. So hovering
+// a gap grabbed everything below. Moving it right next to the edge being dragged caps any jump to
+// one span.
+let pointerDown = false, prevRange = null;
+const isFirefox = navigator.userAgent.includes("Firefox");
+const resetLayer = (tl) => {
+  const end = tl.querySelector(".endOfContent");
+  if (end && end.parentNode !== tl) tl.append(end);
+  tl.classList.remove("selecting");
+};
+const resetLayers = () => { prevRange = null; document.querySelectorAll(".textLayer").forEach(resetLayer); };
+document.addEventListener("pointerdown", () => (pointerDown = true));
+document.addEventListener("pointerup", () => { pointerDown = false; resetLayers(); });
+addEventListener("blur", () => { pointerDown = false; resetLayers(); });
+document.addEventListener("keyup", () => { if (!pointerDown) resetLayers(); });
+document.addEventListener("selectionchange", () => {
+  const sel = getSelection();
+  if (!sel.rangeCount) return resetLayers();
+  const range = sel.getRangeAt(0);
+  for (const tl of document.querySelectorAll(".textLayer")) {
+    if (range.intersectsNode(tl)) tl.classList.add("selecting");
+    else resetLayer(tl);
+  }
+  if (!pointerDown || isFirefox) return; // Firefox already stops at the span under the pointer
+  // which end is moving? if the end boundary didn't change, the user is dragging the start
+  const modifyStart = prevRange && (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 ||
+    range.compareBoundaryPoints(Range.START_TO_END, prevRange) === 0);
+  let anchor = modifyStart ? range.startContainer : range.endContainer;
+  if (anchor.nodeType === Node.TEXT_NODE) anchor = anchor.parentNode;
+  if (!modifyStart && range.endOffset === 0) {
+    do {
+      while (!anchor.previousSibling) anchor = anchor.parentNode;
+      anchor = anchor.previousSibling;
+    } while (!anchor.childNodes.length);
+  }
+  const tl = anchor.parentElement?.closest(".textLayer"), end = tl?.querySelector(".endOfContent");
+  if (end && anchor !== end) anchor.parentElement.insertBefore(end, modifyStart ? anchor : anchor.nextSibling);
+  prevRange = range.cloneRange();
+});
 
 // Crop a page region from the rendered canvas; capped at ~1568px, past which Claude downsamples anyway.
 function crop(el, [fx, fy, fw, fh]) {
@@ -404,9 +445,14 @@ function showPop(note) {
   clearTimeout(popHideT);
   if (popNote === note) return;
   popNote = note;
-  pop.innerHTML = `<div class="q"></div><div class="a"></div>`;
-  pop.querySelector(".q").textContent = "Q · " + note.question;
-  pop.querySelector(".a").innerHTML = md(note.answer);
+  pop.replaceChildren(...turns(note).map((t) => {
+    const d = document.createElement("div");
+    d.className = "turn";
+    d.innerHTML = `<div class="q"></div><div class="a"></div>`;
+    d.querySelector(".q").textContent = "Q · " + t.question;
+    d.querySelector(".a").innerHTML = md(t.answer);
+    return d;
+  }));
   pop.scrollTop = 0;
   pop.hidden = false;
   const rs = [...pages.querySelectorAll(`.hl i[data-id="${note.id}"]`)].map((i) => i.getBoundingClientRect());
@@ -472,20 +518,36 @@ function card(note) {
     fillSuggestions(c.querySelector(".sugs"), note);
     return c;
   }
-  c.insertAdjacentHTML("beforeend", `<div class="q"></div><div class="a"></div><div class="actions"><span class="meta"></span><button class="pin"></button><button class="del">delete</button></div>`);
+  turns(note).forEach((t, i) => {
+    const d = document.createElement("div");
+    d.className = "turn";
+    d.dataset.i = i;
+    d.innerHTML = `<div class="q"></div><div class="a"></div>`;
+    d.querySelector(".q").textContent = "Q · " + t.question;
+    const a = d.querySelector(".a");
+    a.innerHTML = md(t.answer);
+    // ponytail: "long" is a character count, not a measured height; cheap and stable while the margin animates
+    const key = i ? `${note.id}:${i}` : note.id;
+    if (note !== active && t.answer.length > LONG && !expanded.has(key)) {
+      a.classList.add("clamp");
+      const more = document.createElement("button");
+      more.className = "more";
+      more.textContent = "more";
+      more.onclick = () => { expanded.add(key); a.classList.remove("clamp"); more.remove(); };
+      a.after(more);
+    }
+    c.append(d);
+  });
+  c.insertAdjacentHTML("beforeend", `<div class="actions"><span class="meta"></span><button class="reply">follow up</button><button class="pin"></button><button class="del">delete</button></div>`);
   c.querySelector(".meta").textContent = metaText(note);
-  c.querySelector(".q").textContent = "Q · " + note.question;
-  c.querySelector(".a").innerHTML = md(note.answer);
-  // ponytail: "long" is a character count, not a measured height; cheap and stable while the margin animates
-  if (note !== active && note.answer.length > LONG && !expanded.has(note.id)) {
-    const a = c.querySelector(".a");
-    a.classList.add("clamp");
-    const more = document.createElement("button");
-    more.className = "more";
-    more.textContent = "more";
-    more.onclick = () => { expanded.add(note.id); a.classList.remove("clamp"); more.remove(); };
-    a.after(more);
-  }
+  if (note === active && !note.busy) addFollowUp(c, note);
+  const reply = c.querySelector(".reply");
+  reply.hidden = note === active;
+  reply.onclick = () => {
+    active = note;
+    renderCards();
+    $("cards").querySelector(`[data-id="${note.id}"] .followup`)?.focus();
+  };
   const pin = c.querySelector(".pin");
   pin.textContent = note.pinned ? "◆ pinned" : "◇ pin";
   pin.classList.toggle("pinned", note.pinned);
@@ -499,7 +561,26 @@ function card(note) {
   return c;
 }
 
-const metaText = (n) => (n.created ? `${n.model || ""} · ${new Date(n.created).toLocaleDateString()}${n.cached ? " · cached" : ""}` : "");
+// The first question lives on the note itself; follow-ups on the same highlight go in note.thread.
+const turns = (n) => [n, ...(n.thread || [])];
+
+function addFollowUp(c, note) {
+  if (c.querySelector(".followup")) return;
+  const ta = document.createElement("textarea");
+  ta.className = "followup";
+  ta.rows = 1;
+  ta.placeholder = "Ask a follow-up…";
+  ta.onkeydown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey && ta.value.trim()) { e.preventDefault(); ask(note, ta.value.trim()); }
+  };
+  c.querySelector(".actions").before(ta);
+  return ta;
+}
+
+const metaText = (note) => {
+  const n = turns(note).at(-1);
+  return n.created ? `${n.model || ""} · ${new Date(n.created).toLocaleDateString()}${n.cached ? " · cached" : ""}` : "";
+};
 
 function focusCard(note) {
   $("cards").querySelector(`[data-id="${note.id}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -541,40 +622,59 @@ function fillSuggestions(el, note) {
 }
 
 async function ask(note, question) {
-  delete note.sugs;
-  note.question = question;
-  notes.push(note);
+  const [provider, m] = model.split("|");
+  let turn = note;
+  if (!note.question) {
+    delete note.sugs;
+    note.question = question;
+    notes.push(note);
+  } else {
+    turn = { question, answer: "" };
+    (note.thread ??= []).push(turn);
+  }
+  Object.assign(turn, { model: m, created: Date.now() });
+  const history = turns(note).slice(0, -1).map(({ question, answer }) => ({ question, answer }));
+  const i = history.length;
+  note.busy = true;
+  active = note;
   getSelection().removeAllRanges();
   renderCards();
-  const [provider, m] = model.split("|");
-  Object.assign(note, { model: m, created: Date.now() });
-  const body = { provider, model: m, doc: docName, page: note.page, selection: note.quote, image: note.image, context: await getPageText(note.page), question };
-  const out = () => $("cards").querySelector(`[data-id="${note.id}"] .a`);
+  focusCard(note);
+  const body = { provider, model: m, doc: docName, page: note.page, selection: note.quote, image: note.image, context: await getPageText(note.page), question, history };
+  const out = () => $("cards").querySelector(`[data-id="${note.id}"] .turn[data-i="${i}"] .a`);
   try {
     const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(await res.text());
-    note.cached = res.headers.get("X-Cache") === "hit";
+    turn.cached = res.headers.get("X-Cache") === "hit";
     const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      note.answer += value;
+      turn.answer += value;
       const a = out();
-      if (a) a.innerHTML = md(note.answer);
+      if (a) a.innerHTML = md(turn.answer);
     }
   } catch (err) {
-    note.answer += `\n⚠ ${err.message}`;
+    turn.answer += `\n⚠ ${err.message}`;
     const a = out();
-    if (a) a.innerHTML = md(note.answer);
+    if (a) a.innerHTML = md(turn.answer);
   }
+  delete note.busy;
   save(note);
   // update in place: a re-render would wipe a draft being typed
-  const meta = $("cards").querySelector(`[data-id="${note.id}"] .meta`);
-  if (meta) meta.textContent = metaText(note);
+  const c = $("cards").querySelector(`[data-id="${note.id}"]`);
+  if (c) {
+    c.querySelector(".meta").textContent = metaText(note);
+    // keep the conversation going: open a follow-up box, and focus it unless the reader is typing elsewhere
+    if (note === active) {
+      const ta = addFollowUp(c, note);
+      if (ta && !document.activeElement?.closest("input, textarea")) ta.focus();
+    }
+  }
   refreshUsage();
 }
 
-const save = (note) => fetch(`/api/notes/${note.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(note) });
+const save = (note) => fetch(`/api/notes/${note.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...note, busy: undefined }) });
 
 // Math: $$…$$ and \[…\] (display), $…$ and \(…\) (inline). Inline $ follows pandoc's rule
 // (no space inside the delimiters, no digit right after) so "$5 and $10" stays plain text.

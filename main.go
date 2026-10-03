@@ -34,7 +34,13 @@ type askReq struct {
 	Selection string `json:"selection"`
 	Context   string `json:"context"`
 	Question  string `json:"question"`
-	Image     string `json:"image"` // optional data URL of a selected page region
+	Image     string `json:"image"`   // optional data URL of a selected page region
+	History   []turn `json:"history"` // earlier questions and answers on this highlight, oldest first
+}
+
+type turn struct {
+	Question string `json:"question"`
+	Answer   string `json:"answer"`
 }
 
 // prompt describes the page, the highlight and/or attached region, and the question (if any).
@@ -46,8 +52,15 @@ func (q askReq) prompt() string {
 	if q.Selection != "" {
 		s += fmt.Sprintf("\n<highlight>\n%s\n</highlight>\n", q.Selection)
 	}
+	for _, t := range q.History {
+		s += fmt.Sprintf("\nEarlier question: %s\nYour answer: %s\n", t.Question, t.Answer)
+	}
 	if q.Question != "" {
-		s += "\nQuestion: " + q.Question
+		if len(q.History) > 0 {
+			s += "\nFollow-up question: " + q.Question
+		} else {
+			s += "\nQuestion: " + q.Question
+		}
 	}
 	return s
 }
@@ -229,7 +242,12 @@ func main() {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 
-		key := cacheKey("ask", q.Provider, q.Model, q.Selection, q.Context, q.Image, strings.TrimSpace(q.Question))
+		parts := []string{"ask", q.Provider, q.Model, q.Selection, q.Context, q.Image, strings.TrimSpace(q.Question)}
+		if len(q.History) > 0 { // first questions keep their existing cache keys
+			hist, _ := json.Marshal(q.History)
+			parts = append(parts, string(hist))
+		}
+		key := cacheKey(parts...)
 		if v, ok := db.cacheGet(key); ok {
 			w.Header().Set("X-Cache", "hit")
 			w.Write([]byte(v))
