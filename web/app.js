@@ -166,6 +166,24 @@ async function remember(file, pages) {
   fetch(url, { method: "PUT", body: have ? "" : file }).catch(() => {});
 }
 
+// crypto.subtle and crypto.randomUUID exist only in secure contexts (https, or http on localhost).
+// Opened from a LAN address over plain http they're missing, so fall back.
+async function sha256(buf) {
+  const hex = (b) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  if (crypto.subtle) return hex(await crypto.subtle.digest("SHA-256", buf));
+  const r = await fetch("/api/hash", { method: "POST", body: buf });
+  if (!r.ok) throw new Error(await r.text());
+  return r.text();
+}
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const b = crypto.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40; // version 4
+  b[8] = (b[8] & 0x3f) | 0x80; // RFC 4122 variant
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 // ---------- open + render ----------
 async function open(file) {
   if (!file || file.type !== "application/pdf") return;
@@ -173,7 +191,12 @@ async function open(file) {
   $("dropMeta").textContent = "opening…";
   const buf = await file.arrayBuffer();
   // notes are keyed by content hash, so renames/moves keep their history (hash before pdf.js takes the buffer)
-  docHash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", buf))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    docHash = await sha256(buf);
+  } catch (err) {
+    $("dropMeta").textContent = "Couldn't read this PDF: " + err.message;
+    return;
+  }
   try {
     pdf = await pdfjs.getDocument({ data: buf }).promise;
   } catch (err) {
@@ -321,7 +344,7 @@ function noteAt(e) {
 
 // ---------- selection / region → ask ----------
 function startNote(el, rects, quote, image) {
-  active = { id: crypto.randomUUID(), doc: docHash, page: +el.dataset.n, rects, quote, image, question: "", answer: "", pinned: false };
+  active = { id: uuid(), doc: docHash, page: +el.dataset.n, rects, quote, image, question: "", answer: "", pinned: false };
   sidebarOpen = true;
   renderCards();
   $("cards").querySelector("textarea")?.focus();

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -94,8 +96,10 @@ func addUsage(u usage) {
 	usageMu.Unlock()
 }
 
+const defaultAddr = "127.0.0.1:7889"
+
 func main() {
-	addr := flag.String("addr", "127.0.0.1:7889", "listen address")
+	addr := flag.String("addr", defaultAddr, "listen address")
 	noOpen := flag.Bool("no-open", false, "don't open the browser")
 	dbPath := flag.String("db", defaultDBPath(), "SQLite database for notes and cache")
 	flag.Usage = func() {
@@ -129,6 +133,16 @@ func main() {
 		w.Header().Set("X-Doc-Name", filepath.Base(pdfPath))
 		w.Header().Set("Content-Type", "application/pdf")
 		http.ServeFile(w, r, pdfPath)
+	})
+
+	// SHA-256 of the body, for browsers without crypto.subtle (plain http on a non-localhost address).
+	http.HandleFunc("POST /api/hash", func(w http.ResponseWriter, r *http.Request) {
+		h := sha256.New()
+		if _, err := io.Copy(h, http.MaxBytesReader(w, r.Body, 1<<30)); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		fmt.Fprintf(w, "%x", h.Sum(nil))
 	})
 
 	// Copies of opened PDFs, for the "recent" list on the intro page.
@@ -309,18 +323,30 @@ func main() {
 	})
 
 	ln, err := net.Listen("tcp", *addr)
-	if err != nil {
+	if err != nil && *addr == defaultAddr {
 		// another margin is probably running on the default port; take any free one
-		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
-			log.Fatal(err)
-		}
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
-	url := "http://" + ln.Addr().String()
+	if err != nil {
+		log.Fatal(err)
+	}
+	url := browserURL(ln.Addr().(*net.TCPAddr))
 	fmt.Println("Margin running at", url)
 	if !*noOpen {
 		openBrowser(url)
 	}
 	log.Fatal(http.Serve(ln, noStoreAPI(http.DefaultServeMux)))
+}
+
+// browserURL is the address to open. A wildcard listen address (":8080", "0.0.0.0:8080") would
+// give http://[::]:8080, which browsers don't treat as a secure context, so crypto.subtle and
+// crypto.randomUUID are missing; open it as 127.0.0.1 instead.
+func browserURL(a *net.TCPAddr) string {
+	host := a.IP.String()
+	if a.IP.IsUnspecified() {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(a.Port))
 }
 
 // noStoreAPI keeps the browser from caching API responses. Without it, /api/doc (served with
