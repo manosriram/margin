@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- logo.svg tuned for 16px: heavier strokes, solid margin rule (dots blur at tab size) -->
+  <style>
+    .s { stroke: #2f4a6d; } .f { fill: #2f4a6d; }
+    @media (prefers-color-scheme: dark) { .s { stroke: #a9bfdc; } .f { fill: #a9bfdc; } }
+  </style>
+  <rect class="s" x="2.5" y="2.5" width="27" height="27" rx="7" stroke-width="2.6"/>
+  <path class="s" d="M21.5 2.5v27" stroke-width="1.6" opacity=".55"/>
+  <path class="s" d="M8.5 18c3.5-8 11-8.5 16.5-3.2" stroke-width="2.6"/>
+  <circle class="f" cx="25" cy="14.8" r="3"/>
+</svg>

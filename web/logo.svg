@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <!-- A frame split by a dotted margin rule; an arc carries a point from the text side into the margin. -->
+  <style>
+    .s { stroke: #2f4a6d; } .f { fill: #2f4a6d; }
+    @media (prefers-color-scheme: dark) { .s { stroke: #a9bfdc; } .f { fill: #a9bfdc; } }
+  </style>
+  <rect class="s" x="3" y="3" width="26" height="26" rx="6" stroke-width="1.6"/>
+  <path class="s" d="M21.5 3v26" stroke-width="1.4" stroke-dasharray="0.1 2.8"/>
+  <path class="s" d="M9 17.5c3.5-7.5 10.5-8 16-3" stroke-width="1.6"/>
+  <circle class="f" cx="9" cy="17.5" r="1.7"/>
+  <circle class="f" cx="25" cy="14.5" r="2.3"/>
+</svg>
