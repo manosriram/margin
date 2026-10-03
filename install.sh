@@ -47,7 +47,7 @@ if command -v sha256sum >/dev/null 2>&1; then
 else
   got=$(shasum -a 256 "$tmp/$asset" | cut -d' ' -f1)
 fi
-[ -n "$want" ] && [ "$want" = "$got" ] || err "checksum mismatch for $asset"
+if [ -z "$want" ] || [ "$want" != "$got" ]; then err "checksum mismatch for $asset"; fi
 
 tar -xzf "$tmp/$asset" -C "$tmp" margin
 
