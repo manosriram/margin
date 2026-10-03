@@ -68,6 +68,9 @@ p.sub { font-family:"IBM Plex Sans",var(--sans); font-weight:300; color:var(--mu
 .dd-menu [aria-selected="true"] { color:var(--acc); }
 .dd-menu [aria-selected="true"]::after { content:"✓"; font-size:12px; }
 .bar .doc { flex:1; min-width:0; font-family:var(--mono); font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar .pager { display:flex; align-items:center; gap:4px; font:12px var(--mono); color:var(--muted); white-space:nowrap; }
+.bar .pager input { width:4ch; padding:3px 4px; border:1px solid var(--line); border-radius:5px; background:var(--sheet); color:var(--ink); font:inherit; text-align:right; outline:none; }
+.bar .pager input:focus { border-color:var(--acc); }
 .bar .toggle { display:flex; align-items:center; gap:6px; font:12px var(--mono); color:var(--muted); cursor:pointer; user-select:none; }
 .bar button.toggle:hover, .bar button.toggle.on { color:var(--acc); }
 .split { flex:1; min-height:0; display:grid; grid-template-columns:1fr 0; transition:grid-template-columns .25s ease; }
@@ -97,6 +100,8 @@ p.sub { font-family:"IBM Plex Sans",var(--sans); font-weight:300; color:var(--mu
 .page .hl i.on { background:var(--hl-strong); }
 .page .hl i.box { background:rgba(47,74,109,.05); border:1.5px solid var(--acc); border-radius:3px; }
 .page .hl i.box.on { background:var(--hl); }
+.page .hl i.flash { animation:hlflash 1.6s ease-out; }
+@keyframes hlflash { 0%, 35% { background:var(--hl-strong); box-shadow:0 0 0 3px var(--hl); } 100% { box-shadow:0 0 0 3px transparent; } }
 
 .card { background:#fff; border-radius:8px; padding:12px 14px; font-size:13px; line-height:1.55; box-shadow:0 6px 18px rgba(30,35,50,.08); border-left:2px solid var(--acc); transition:box-shadow .2s; }
 .card.on { box-shadow:0 0 0 2px var(--hl-strong), 0 6px 18px rgba(30,35,50,.08); }
@@ -114,7 +119,7 @@ p.sub { font-family:"IBM Plex Sans",var(--sans); font-weight:300; color:var(--mu
 .card .sugs button { text-align:left; font-size:12.5px; line-height:1.4; padding:5px 10px; border:1px solid var(--line); border-radius:12px; background:var(--sheet); }
 .card .sugs button:hover { border-color:var(--acc); color:var(--acc); }
 .card .sugs .loading { font:11px var(--mono); color:var(--muted); font-style:italic; }
-.card .q { font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--acc); text-decoration:underline wavy; text-decoration-thickness:1px; text-underline-offset:4px; margin-bottom:6px; }
+.card .q { cursor:pointer; font-family:var(--mono); font-size:12.5px; font-weight:600; color:var(--acc); text-decoration:underline wavy; text-decoration-thickness:1px; text-underline-offset:4px; margin-bottom:6px; }
 .card .a { white-space:pre-wrap; }
 .card .a.clamp { max-height:7.8em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 60%, transparent); mask-image:linear-gradient(#000 60%, transparent); }
 .card .more { font:11px var(--mono); color:var(--acc); margin-top:4px; }

@@ -64,6 +64,7 @@ document.addEventListener("keydown", (e) => {
   if ($("reader").hidden || e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, textarea, [role=listbox]")) return;
   const k = e.key.toLowerCase();
   if (k === "r") setSnip(!snipping);
+  else if (k === "g") { e.preventDefault(); pageNo.focus(); }
   else if (k === "m") toggleSidebar();
 });
 
@@ -241,6 +242,8 @@ async function layout(fraction) {
     els.push(el);
   }
   pages.replaceChildren(...els);
+  $("pageCount").textContent = pdf.numPages;
+  $("pageNo").style.width = String(pdf.numPages).length + 2 + "ch";
   els.forEach((el) => io.observe(el));
   pages.scrollTop = fraction * pages.scrollHeight;
   onScroll();
@@ -303,10 +306,30 @@ pages.addEventListener("scroll", () => {
   scrollRaf = requestAnimationFrame(() => { onScroll(); flash(`${currentPage()} / ${pdf.numPages}`); });
 });
 function onScroll() {
+  if (document.activeElement !== $("pageNo")) $("pageNo").value = currentPage();
   const max = pages.scrollHeight - pages.clientHeight;
   $("prog").style.width = (max > 0 ? (pages.scrollTop / max) * 100 : 100) + "%";
   if (docHash) store.set(`margin:pos:${docHash}`, pages.scrollTop / pages.scrollHeight);
 }
+// navbar page box: type a page number and press enter to jump there
+const pageNo = $("pageNo");
+function goToPage(n) {
+  pages.querySelector(`.page[data-n="${Math.max(1, Math.min(n, pdf.numPages))}"]`)?.scrollIntoView();
+}
+pageNo.onfocus = () => pageNo.select();
+pageNo.onkeydown = (e) => {
+  if (e.key === "Enter") {
+    const n = parseInt(pageNo.value, 10);
+    if (n) goToPage(n);
+    pageNo.blur();
+  } else if (e.key === "Escape") {
+    pageNo.blur();
+  } else return;
+  e.preventDefault();
+  e.stopPropagation(); // Escape here shouldn't also close the active card
+};
+pageNo.onblur = () => (pageNo.value = currentPage());
+
 function currentPage() {
   const mid = pages.getBoundingClientRect().top + pages.clientHeight / 2;
   const el = [...pages.children].find((p) => p.getBoundingClientRect().bottom > mid);
@@ -329,10 +352,28 @@ function drawHighlights(el) {
     const i = document.createElement("i");
     i.dataset.id = note.id;
     i.classList.toggle("box", !!note.image);
+    i.classList.toggle("flash", note.id === flashId);
     Object.assign(i.style, { left: x * 100 + "%", top: y * 100 + "%", width: w * 100 + "%", height: h * 100 + "%" });
     layer.append(i);
   }
 }
+// Scroll the passage (not just its page) to a third of the way down the view, then pulse it.
+let flashId = null, flashT2;
+function scrollToNote(note) {
+  const el = pages.querySelector(`.page[data-n="${note.page}"]`);
+  if (!el) return;
+  const top = Math.min(...note.rects.map((r) => r[1]));
+  const pr = el.getBoundingClientRect(), vr = pages.getBoundingClientRect();
+  pages.scrollTo({ top: pages.scrollTop + pr.top - vr.top + top * pr.height - pages.clientHeight / 3, behavior: "smooth" });
+  // the class is also set in drawHighlights, so the pulse survives the page rendering mid-scroll
+  flashId = note.id;
+  clearTimeout(flashT2);
+  const set = (on) => pages.querySelectorAll(`.hl i[data-id="${note.id}"]`).forEach((i) => i.classList.toggle("flash", on));
+  set(false);
+  requestAnimationFrame(() => set(true)); // restart the animation on a repeat click
+  flashT2 = setTimeout(() => { flashId = null; set(false); }, 1600);
+}
+
 const redrawAll = () => document.querySelectorAll(".page").forEach(drawHighlights);
 
 function noteAt(e) {
@@ -352,7 +393,7 @@ function startNote(el, rects, quote, image) {
 }
 
 pages.addEventListener("mousedown", (e) => {
-  if (!snipping) return;
+  if (!snipping) return e.target.closest(".textLayer")?.classList.add("selecting");
   const el = e.target.closest(".page");
   if (!el || e.button !== 0) return;
   e.preventDefault();
@@ -380,47 +421,7 @@ pages.addEventListener("mousedown", (e) => {
   addEventListener("mouseup", up);
 });
 
-// Accurate text selection (ported from pdf.js's TextLayerBuilder). While selecting, .endOfContent
-// covers the whole page so the gaps between lines don't select nothing. But Chrome/Safari extend
-// the selection to wherever that element sits in the DOM, which is the end of the page. So hovering
-// a gap grabbed everything below. Moving it right next to the edge being dragged caps any jump to
-// one span.
-let pointerDown = false, prevRange = null;
-const isFirefox = navigator.userAgent.includes("Firefox");
-const resetLayer = (tl) => {
-  const end = tl.querySelector(".endOfContent");
-  if (end && end.parentNode !== tl) tl.append(end);
-  tl.classList.remove("selecting");
-};
-const resetLayers = () => { prevRange = null; document.querySelectorAll(".textLayer").forEach(resetLayer); };
-document.addEventListener("pointerdown", () => (pointerDown = true));
-document.addEventListener("pointerup", () => { pointerDown = false; resetLayers(); });
-addEventListener("blur", () => { pointerDown = false; resetLayers(); });
-document.addEventListener("keyup", () => { if (!pointerDown) resetLayers(); });
-document.addEventListener("selectionchange", () => {
-  const sel = getSelection();
-  if (!sel.rangeCount) return resetLayers();
-  const range = sel.getRangeAt(0);
-  for (const tl of document.querySelectorAll(".textLayer")) {
-    if (range.intersectsNode(tl)) tl.classList.add("selecting");
-    else resetLayer(tl);
-  }
-  if (!pointerDown || isFirefox) return; // Firefox already stops at the span under the pointer
-  // which end is moving? if the end boundary didn't change, the user is dragging the start
-  const modifyStart = prevRange && (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 ||
-    range.compareBoundaryPoints(Range.START_TO_END, prevRange) === 0);
-  let anchor = modifyStart ? range.startContainer : range.endContainer;
-  if (anchor.nodeType === Node.TEXT_NODE) anchor = anchor.parentNode;
-  if (!modifyStart && range.endOffset === 0) {
-    do {
-      while (!anchor.previousSibling) anchor = anchor.parentNode;
-      anchor = anchor.previousSibling;
-    } while (!anchor.childNodes.length);
-  }
-  const tl = anchor.parentElement?.closest(".textLayer"), end = tl?.querySelector(".endOfContent");
-  if (end && anchor !== end) anchor.parentElement.insertBefore(end, modifyStart ? anchor : anchor.nextSibling);
-  prevRange = range.cloneRange();
-});
+document.addEventListener("mouseup", () => document.querySelectorAll(".textLayer.selecting").forEach((t) => t.classList.remove("selecting")));
 
 // Crop a page region from the rendered canvas; capped at ~1568px, past which Claude downsamples anyway.
 function crop(el, [fx, fy, fw, fh]) {
@@ -521,7 +522,7 @@ function card(note) {
   const c = document.createElement("div");
   c.className = "card";
   c.dataset.id = note.id;
-  const goto = () => pages.querySelector(`.page[data-n="${note.page}"]`)?.scrollIntoView({ behavior: "smooth" });
+  const goto = () => scrollToNote(note);
   if (note.image) {
     c.innerHTML = `<div class="quote"><small>p.${note.page} · region</small></div><img class="shot" alt="Selected region">`;
     c.querySelector(".shot").src = note.image;
@@ -547,6 +548,8 @@ function card(note) {
     d.dataset.i = i;
     d.innerHTML = `<div class="q"></div><div class="a"></div>`;
     d.querySelector(".q").textContent = "Q · " + t.question;
+    d.querySelector(".q").onclick = goto;
+    d.querySelector(".q").title = "Show in the paper";
     const a = d.querySelector(".a");
     a.innerHTML = md(t.answer);
     // ponytail: "long" is a character count, not a measured height; cheap and stable while the margin animates
