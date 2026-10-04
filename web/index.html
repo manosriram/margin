@@ -51,6 +51,11 @@
     <button class="tool" id="snipBtn" title="Ask about a region: figure, table, equation (R)" aria-label="Select region">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14M2 6h14a2 2 0 0 1 2 2v14"/></svg>
     </button>
+    <div class="zoom" role="group" aria-label="PDF zoom">
+      <button type="button" id="zoomOut" title="Zoom out (−)" aria-label="Zoom out">−</button>
+      <button type="button" id="zoomReset" title="Fit width (0)">100%</button>
+      <button type="button" id="zoomIn" title="Zoom in (+)" aria-label="Zoom in">+</button>
+    </div>
     <span class="sep"></span>
     <button class="toggle" id="history" title="Show every question asked on this document">history (0)</button>
     <div class="dd" id="modelDD">
@@ -67,6 +72,7 @@
   <div class="split" id="split">
     <main id="pages"></main>
     <aside id="margin">
+      <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="Resize margin" title="Drag to resize · double-click to reset"></div>
       <div id="cards"></div>
       <div class="mfoot">
         <button type="button" class="switch" id="suggest" role="switch" aria-checked="false" aria-labelledby="suggestLbl"><span class="knob"></span></button>

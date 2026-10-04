@@ -14,6 +14,8 @@ let showAll = false;     // margin shows every past question, not just pinned on
 let sidebarOpen = false;
 let snipping = false;    // region-select mode (ask about a figure/table/equation as an image)
 let model = store.get("margin:model", ""); // "provider|model"
+let side = store.get("margin:side", 0.3);  // margin width as a fraction of the reader, so window resizes keep the ratio
+let zoom = store.get("margin:zoom", 1);    // PDF only, on top of fit-to-width; the margin and toolbar keep their size
 const pageText = {};
 const pages = $("pages");
 
@@ -65,6 +67,9 @@ document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "r") setSnip(!snipping);
   else if (k === "g") { e.preventDefault(); pageNo.focus(); }
+  else if (k === "+" || k === "=") zoomStep(1);
+  else if (k === "-") zoomStep(-1);
+  else if (k === "0") setZoom(1);
   else if (k === "m") toggleSidebar();
 });
 
@@ -218,20 +223,18 @@ async function open(file) {
 
 // Pages are sized to fit the reading column *with the margin open*, so toggling it never scrolls sideways.
 let lastWidth = 0;
+let layoutGen = 0;
 async function layout(fraction) {
+  const gen = ++layoutGen; // fast zoom clicks start overlapping layouts; only the last one wins
   const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
   const split = $("split").clientWidth;
-  scale = Math.min(1.6, (split * (innerWidth > 760 ? 0.7 : 1) - 48) / first.width);
+  applySide(); // the reader was hidden (width 0) when the page loaded, and windows resize
+  const s = Math.min(1.6, ((innerWidth > 760 ? split - sideWidth(split) : split) - 48) / first.width) * zoom;
   lastWidth = split;
-
-  io?.disconnect();
-  io = new IntersectionObserver((entries) => {
-    for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); renderPage(e.target); }
-  }, { root: pages, rootMargin: "600px 0px" });
 
   const els = [];
   for (let n = 1; n <= pdf.numPages; n++) {
-    const vp = (await pdf.getPage(n)).getViewport({ scale });
+    const vp = (await pdf.getPage(n)).getViewport({ scale: s });
     const el = document.createElement("div");
     el.className = "page";
     el.dataset.n = n;
@@ -241,6 +244,12 @@ async function layout(fraction) {
     el.innerHTML = `<canvas></canvas><div class="hl"></div><div class="textLayer"></div>`;
     els.push(el);
   }
+  if (gen !== layoutGen) return;
+  scale = s;
+  io?.disconnect();
+  io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { io.unobserve(e.target); renderPage(e.target); }
+  }, { root: pages, rootMargin: "600px 0px" });
   pages.replaceChildren(...els);
   $("pageCount").textContent = pdf.numPages;
   $("pageNo").style.width = String(pdf.numPages).length + 2 + "ch";
@@ -248,6 +257,67 @@ async function layout(fraction) {
   pages.scrollTop = fraction * pages.scrollHeight;
   onScroll();
 }
+
+// ---------- PDF zoom ----------
+const ZOOMS = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+let zoomT;
+function setZoom(z, now = true) {
+  zoom = Math.max(ZOOMS[0], Math.min(z, ZOOMS.at(-1)));
+  store.set("margin:zoom", zoom);
+  $("zoomReset").textContent = Math.round(zoom * 100) + "%";
+  if (!pdf) return;
+  clearTimeout(zoomT);
+  const go = () => layout(pages.scrollTop / pages.scrollHeight);
+  if (now) go();
+  else zoomT = setTimeout(go, 150); // pinch sends many events; relayout once it settles
+}
+const zoomStep = (dir) => setZoom(dir > 0 ? ZOOMS.find((z) => z > zoom + 0.001) ?? zoom : ZOOMS.findLast((z) => z < zoom - 0.001) ?? zoom);
+$("zoomIn").onclick = () => zoomStep(1);
+$("zoomOut").onclick = () => zoomStep(-1);
+$("zoomReset").onclick = () => setZoom(1);
+$("zoomReset").textContent = Math.round(zoom * 100) + "%";
+// trackpad pinch (and ctrl+wheel) arrives as a wheel event with ctrlKey; zoom the PDF, not the whole UI
+pages.addEventListener("wheel", (e) => {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  setZoom(zoom * Math.exp(-e.deltaY * 0.01), false);
+}, { passive: false });
+
+// ---------- margin width (drag its left edge) ----------
+const SIDE_MIN = 240, SIDE_MAX = 0.6;
+const sideWidth = (split) => Math.max(SIDE_MIN, Math.min(side * split, SIDE_MAX * split));
+function applySide() { $("split").style.setProperty("--side", sideWidth($("split").clientWidth) + "px"); }
+const resizer = $("resizer");
+resizer.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  resizer.setPointerCapture(e.pointerId);
+  const sp = $("split"), r = sp.getBoundingClientRect();
+  sp.classList.add("resizing");
+  hidePop();
+  const move = (ev) => {
+    side = (r.right - ev.clientX) / r.width;
+    applySide();
+  };
+  const up = () => {
+    resizer.removeEventListener("pointermove", move);
+    resizer.removeEventListener("pointerup", up);
+    resizer.removeEventListener("pointercancel", up);
+    sp.classList.remove("resizing");
+    side = sideWidth(r.width) / r.width; // store the clamped value
+    store.set("margin:side", side);
+    if (pdf) layout(pages.scrollTop / pages.scrollHeight); // refit pages to the new column
+  };
+  resizer.addEventListener("pointermove", move);
+  resizer.addEventListener("pointerup", up);
+  resizer.addEventListener("pointercancel", up);
+});
+resizer.ondblclick = () => {
+  side = 0.3;
+  store.set("margin:side", side);
+  applySide();
+  if (pdf) layout(pages.scrollTop / pages.scrollHeight);
+};
 
 let resizeT;
 addEventListener("resize", () => {
@@ -344,13 +414,63 @@ function flash(text) {
 }
 
 // ---------- highlights ----------
+// Pastel highlight colors: [fill, fill under the pointer, underline]. Each note keeps one color,
+// picked from its id, so it stays the same across reloads without storing anything.
+const PALETTE = [
+  ["#fff59d", "#ffee58", "#d4b800"], // lemon
+  ["#c8f2c2", "#a5e89c", "#5fae57"], // mint
+  ["#ffd1e3", "#ffb3d0", "#d9709b"], // pink
+  ["#cfe6ff", "#a9d1ff", "#5b8fd1"], // sky
+  ["#ffdcb8", "#ffc68f", "#d98b3a"], // peach
+  ["#e2d6ff", "#cdbaff", "#9273d1"], // lavender
+];
+function noteColor(note) {
+  let h = 0;
+  for (const ch of note.id) h = (h * 31 + ch.charCodeAt(0)) | 0;
+  const [fill, strong, line] = PALETTE[Math.abs(h) % PALETTE.length];
+  return `--c:${fill};--c-strong:${strong};--c-line:${line}`;
+}
+
+// A selection gives one rect per text span, and spans overlap; with multiply blending every overlap
+// showed up darker. Merge rects on the same line into one, then split any overlap between lines.
+function mergeRects(rects) {
+  const out = rects.map((r) => [...r]);
+  const sameLine = (a, b) => {
+    const shared = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]);
+    return shared > 0.5 * Math.min(a[3], b[3]) && b[0] <= a[0] + a[2] + 0.01 && b[0] + b[2] >= a[0] - 0.01;
+  };
+  // repeat until stable: a merged rect can grow into one that was kept apart earlier
+  for (let merged = true; merged; ) {
+    merged = false;
+    for (let i = 0; i < out.length; i++) for (let j = out.length - 1; j > i; j--) {
+      const a = out[i], b = out[j];
+      if (!sameLine(a, b)) continue;
+      const x0 = Math.min(a[0], b[0]), y0 = Math.min(a[1], b[1]);
+      out[i] = [x0, y0, Math.max(a[0] + a[2], b[0] + b[2]) - x0, Math.max(a[1] + a[3], b[1] + b[3]) - y0];
+      out.splice(j, 1);
+      merged = true;
+    }
+  }
+  out.sort((a, b) => a[1] - b[1]);
+  for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+    const a = out[i], b = out[j];
+    if (b[1] >= a[1] + a[3] || b[0] >= a[0] + a[2] || b[0] + b[2] <= a[0]) continue;
+    const mid = (a[1] + a[3] + b[1]) / 2, bottom = b[1] + b[3];
+    a[3] = Math.max(0, mid - a[1]);
+    b[1] = mid;
+    b[3] = Math.max(0, bottom - mid);
+  }
+  return out;
+}
+
 function drawHighlights(el) {
   const n = +el.dataset.n, layer = el.querySelector(".hl");
   layer.innerHTML = "";
   const all = active && !notes.includes(active) ? [...notes, active] : notes; // include the draft being asked
-  for (const note of all) if (note.page === n) for (const [x, y, w, h] of note.rects) {
+  for (const note of all) if (note.page === n) for (const [x, y, w, h] of note.image ? note.rects : mergeRects(note.rects)) {
     const i = document.createElement("i");
     i.dataset.id = note.id;
+    i.style.cssText = noteColor(note);
     i.classList.toggle("box", !!note.image);
     i.classList.toggle("flash", note.id === flashId);
     Object.assign(i.style, { left: x * 100 + "%", top: y * 100 + "%", width: w * 100 + "%", height: h * 100 + "%" });
@@ -469,6 +589,7 @@ function showPop(note) {
   clearTimeout(popHideT);
   if (popNote === note) return;
   popNote = note;
+  pop.style.cssText = noteColor(note);
   pop.replaceChildren(...turns(note).map((t) => {
     const d = document.createElement("div");
     d.className = "turn";
@@ -522,6 +643,7 @@ function card(note) {
   const c = document.createElement("div");
   c.className = "card";
   c.dataset.id = note.id;
+  c.style.cssText = noteColor(note); // card edge matches its highlight
   const goto = () => scrollToNote(note);
   if (note.image) {
     c.innerHTML = `<div class="quote"><small>p.${note.page} · region</small></div><img class="shot" alt="Selected region">`;
