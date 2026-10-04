@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,15 +99,35 @@ func addUsage(u usage) {
 
 const defaultAddr = "127.0.0.1:7889"
 
+// version is set at release build time with -ldflags "-X main.version=v1.2".
+var version = ""
+
+// buildVersion falls back to the module version for `go install` builds, then "dev".
+func buildVersion() string {
+	if version != "" {
+		return version
+	}
+	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" && bi.Main.Version != "(devel)" {
+		return bi.Main.Version
+	}
+	return "dev"
+}
+
 func main() {
 	addr := flag.String("addr", defaultAddr, "listen address")
 	noOpen := flag.Bool("no-open", false, "don't open the browser")
 	dbPath := flag.String("db", defaultDBPath(), "SQLite database for notes and cache")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "usage: margin [flags] [file.pdf]\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("margin", buildVersion())
+		return
+	}
 
 	var pdfPath string
 	if flag.NArg() > 0 {
