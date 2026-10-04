@@ -27,10 +27,20 @@ $("file").onchange = (e) => open(e.target.files[0]);
 drop.addEventListener("drop", (e) => open(e.dataTransfer.files[0]));
 $("home").onclick = () => (location.href = "/?home");
 
-// `margin file.pdf` → the server hands us that file
-if (!location.search.includes("home")) fetch("/api/doc", { cache: "no-store" }).then(async (r) => {
+// /d/<slug> opens that stored paper; otherwise `margin file.pdf` → the server hands us that file
+const slug = location.pathname.match(/^\/d\/([0-9a-f]+)$/)?.[1];
+if (slug) openStored(slug);
+else if (!location.search.includes("home")) fetch("/api/doc", { cache: "no-store" }).then(async (r) => {
   if (r.ok) open(new File([await r.blob()], r.headers.get("X-Doc-Name") || "document.pdf", { type: "application/pdf" }));
 });
+
+async function openStored(slug) {
+  const d = await fetch(`/api/resolve/${slug}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const r = d && (await fetch(`/api/docs/${d.hash}`));
+  if (r?.ok) return open(new File([await r.blob()], d.name, { type: "application/pdf" }));
+  history.replaceState(null, "", "/");
+  $("dropMeta").textContent = "That link's paper isn't in your library. Open it again to restore the link.";
+}
 
 // ---------- toolbar ----------
 $("history").onclick = () => { showAll = !showAll; if (showAll) sidebarOpen = true; renderCards(); };
@@ -155,10 +165,7 @@ fetch("/api/recent").then((r) => r.json()).then((docs) => {
     b.innerHTML = `<span class="rname"></span><span class="rmeta"></span>`;
     b.querySelector(".rname").textContent = d.name;
     b.querySelector(".rmeta").textContent = `${d.pages ? d.pages + " pages · " : ""}${since(d.opened)}`;
-    b.onclick = async () => {
-      const r = await fetch(`/api/docs/${d.hash}`);
-      if (r.ok) open(new File([await r.blob()], d.name, { type: "application/pdf" }));
-    };
+    b.onclick = () => openStored(d.hash);
     const li = document.createElement("li");
     li.append(b);
     return li;
@@ -211,6 +218,7 @@ async function open(file) {
   }
   docName = file.name;
   remember(file, pdf.numPages);
+  history.replaceState(null, "", `/d/${docHash.slice(0, 12)}`);
   notes = await fetch(`/api/notes?doc=${docHash}`).then((r) => r.json()).catch(() => []);
   sidebarOpen = notes.some((n) => n.pinned);
   $("docName").textContent = file.name;

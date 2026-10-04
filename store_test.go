@@ -59,6 +59,16 @@ func TestStore(t *testing.T) {
 		t.Fatalf("listed doc without a copy: %+v", r)
 	}
 
+	if d, ok, _ := s.resolveDoc(h[:12]); !ok || d.Hash != h {
+		t.Fatalf("resolve by slug: %+v %v", d, ok)
+	}
+	if _, ok, _ := s.resolveDoc("0000000"); ok { // matches the doc row without a stored copy
+		t.Fatal("resolved a doc without a copy")
+	}
+	if _, ok, _ := s.resolveDoc("zz%"); ok {
+		t.Fatal("resolved a non-hex slug")
+	}
+
 	if cacheKey("a", "bc") == cacheKey("ab", "c") {
 		t.Fatal("cache key collision across part boundaries")
 	}

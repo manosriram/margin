@@ -123,6 +123,10 @@ func main() {
 
 	web, _ := fs.Sub(webFS, "web")
 	http.Handle("/", http.FileServerFS(web))
+	// /d/<hash prefix> is a shareable link to a stored paper; the page itself resolves and opens it.
+	http.HandleFunc("GET /d/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, web, "index.html")
+	})
 
 	// The PDF given on the command line, if any; the UI opens it on load.
 	http.HandleFunc("GET /api/doc", func(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +157,19 @@ func main() {
 			return
 		}
 		json.NewEncoder(w).Encode(docs)
+	})
+
+	http.HandleFunc("GET /api/resolve/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		d, ok, err := db.resolveDoc(r.PathValue("slug"))
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(d)
 	})
 
 	http.HandleFunc("GET /api/docs/{hash}", func(w http.ResponseWriter, r *http.Request) { // GET also answers HEAD

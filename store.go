@@ -121,6 +121,34 @@ type recentDoc struct {
 	Opened int64  `json:"opened"`
 }
 
+var hashPrefix = regexp.MustCompile(`^[0-9a-f]{6,64}$`)
+
+// resolveDoc finds the stored document whose hash starts with prefix (the slug in /d/<prefix>).
+// found is false if none or several match, or the copy is missing.
+func (s *store) resolveDoc(prefix string) (d recentDoc, found bool, err error) {
+	if !hashPrefix.MatchString(prefix) {
+		return d, false, nil
+	}
+	rows, err := s.db.Query(`SELECT hash, name, pages, opened FROM docs WHERE hash LIKE ? || '%' LIMIT 2`, prefix)
+	if err != nil {
+		return d, false, err
+	}
+	defer rows.Close()
+	n := 0
+	for rows.Next() {
+		if err := rows.Scan(&d.Hash, &d.Name, &d.Pages, &d.Opened); err != nil {
+			return d, false, err
+		}
+		n++
+	}
+	if n != 1 {
+		return d, false, rows.Err()
+	}
+	p, _ := s.docPath(d.Hash)
+	_, statErr := os.Stat(p)
+	return d, statErr == nil, nil
+}
+
 // recentDocs lists the most recently opened documents whose copy still exists.
 func (s *store) recentDocs(n int) ([]recentDoc, error) {
 	rows, err := s.db.Query(`SELECT hash, name, pages, opened FROM docs ORDER BY opened DESC`)
