@@ -2,6 +2,10 @@
 
 Read a PDF, highlight a passage, ask about it. Answers live in the margin — pin them, or leave them to show on hover.
 
+<img width="1174" height="851" alt="Screenshot 2026-10-05 at 1 09 21 AM" src="https://github.com/user-attachments/assets/f5aa5a65-74a2-495c-8757-141fac172ebb" />
+
+<img width="1174" height="850" alt="Screenshot 2026-10-05 at 1 10 41 AM" src="https://github.com/user-attachments/assets/b36da91f-5e11-4861-8cfc-1fc330321114" />
+
 ## Requirements
 
 - [Claude Code](https://claude.com/claude-code) installed and logged in (`claude` on your PATH)
